@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+/* PCL brand tokens — exposed as Tailwind theme colors (bg-pcl-*, text-pcl-*, border-pcl-*)
+   and font families (font-sans = Barlow, font-condensed = Barlow Condensed). */
+@theme {
+  --color-pcl-green: #00502f; /* primary — headers, total bars, primary buttons */
+  --color-pcl-yellow: #ffc425; /* accent — active/hover, escalation input highlight */
+  --color-pcl-darkgray: #36383d; /* body + card text */
+  --color-pcl-midgray: #a6a6a6; /* borders, secondary text */
+  --color-pcl-lightgray: #cfcfcf; /* column backgrounds, light borders */
+
+  /* secondary group palette — card category badges */
+  --color-pcl-indigo: #4e5ba8;
+  --color-pcl-purple: #941f6e;
+  --color-pcl-lightgreen: #098371;
+  --color-pcl-orange: #d83c31;
+
+  --font-sans: "Barlow", ui-sans-serif, system-ui, sans-serif;
+  --font-condensed: "Barlow Condensed", ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    color: var(--color-pcl-darkgray);
+  }
+}
