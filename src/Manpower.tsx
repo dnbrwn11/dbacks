@@ -97,7 +97,6 @@ export default function Manpower({
   const [yrWeeks, setYrWeeks] = useState(48)
   const [hoursPerWeek, setHoursPerWeek] = useState(40)
   const [peakingFactor, setPeakingFactor] = useState(1.5)
-  const [siteCapacity, setSiteCapacity] = useState(350)
   const [staffRatio, setStaffRatio] = useState(30)
   const [baseTeam, setBaseTeam] = useState(8)
   const [laborFractions, setLaborFractions] = useState<Record<string, number>>(seedLaborFractions)
@@ -173,7 +172,6 @@ export default function Manpower({
   ])
 
   const gridCols = `200px repeat(${YEARS.length}, minmax(0, 1fr))`
-  const anyOverCapacity = YEARS.some((y) => yearPeak[y] > siteCapacity)
 
   return (
     <div className="flex flex-col gap-4">
@@ -219,14 +217,6 @@ export default function Manpower({
           <Assumption label="Offseason window" value={offWeeks} onChange={setOffWeeks} suffix="wks" />
           <Assumption label="Year-round window" value={yrWeeks} onChange={setYrWeeks} suffix="wks" />
           <Assumption label="Hours / week" value={hoursPerWeek} onChange={setHoursPerWeek} suffix="hr" />
-          <Assumption
-            label="Site capacity (peak)"
-            value={siteCapacity}
-            onChange={setSiteCapacity}
-            step={10}
-            suffix="ppl"
-            hint="years over this flag red"
-          />
           <Assumption label="Craft per field staff" value={staffRatio} onChange={setStaffRatio} suffix=":1" />
           <Assumption label="Base team" value={baseTeam} onChange={setBaseTeam} suffix="ppl" />
         </div>
@@ -352,7 +342,7 @@ export default function Manpower({
           })}
         </div>
 
-        {/* Site peak craft — congestion / trade-stacking number, capacity-flagged */}
+        {/* Site peak craft — congestion / trade-stacking number */}
         <div
           className="mt-2 grid items-stretch gap-1 border-t-2 border-pcl-lightgray pt-2"
           style={{ gridTemplateColumns: gridCols }}
@@ -361,36 +351,19 @@ export default function Manpower({
             <span className="font-condensed text-xs font-bold uppercase tracking-wide text-pcl-darkgray">
               Site peak craft
             </span>
-            <span className="font-sans text-[10px] text-pcl-midgray">cap {siteCapacity} · sum of trade peaks</span>
+            <span className="font-sans text-[10px] text-pcl-midgray">sum of trade peaks</span>
           </div>
           {YEARS.map((y) => {
             const total = yearPeak[y]
-            const over = total > siteCapacity
             return (
               <div
                 key={y}
-                title={
-                  `${y}: ~${total} peak craft on site` +
-                  (over ? ` — exceeds site capacity (${siteCapacity}): labor density risk` : '')
-                }
-                className={
-                  'flex min-h-[40px] flex-col items-center justify-center gap-0.5 rounded-md ' +
-                  (over ? 'bg-pcl-orange/15 ring-1 ring-inset ring-pcl-orange' : 'bg-pcl-lightgray/40')
-                }
+                title={`${y}: ~${total} peak craft on site`}
+                className="flex min-h-[40px] flex-col items-center justify-center gap-0.5 rounded-md bg-pcl-lightgray/40"
               >
-                <span
-                  className={
-                    'font-condensed text-lg font-bold leading-none tabular-nums ' +
-                    (over ? 'text-pcl-orange' : 'text-pcl-darkgray')
-                  }
-                >
+                <span className="font-condensed text-lg font-bold leading-none tabular-nums text-pcl-darkgray">
                   ~{total}
                 </span>
-                {over && (
-                  <span className="rounded bg-pcl-orange px-1 py-0.5 font-condensed text-[8px] font-bold uppercase tracking-wide text-white">
-                    Labor density risk
-                  </span>
-                )}
               </div>
             )
           })}
@@ -418,9 +391,6 @@ export default function Manpower({
         </div>
 
         <p className="mt-3 font-sans text-[11px] italic text-pcl-midgray">
-          {anyOverCapacity
-            ? 'One or more years exceed the site-capacity threshold — shown in red as a labor-density risk. '
-            : ''}
           Parametric estimate only — not a CPM or resource-loaded schedule. All headcounts rounded to
           whole people.
         </p>
