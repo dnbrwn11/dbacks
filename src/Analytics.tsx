@@ -13,8 +13,8 @@ import {
   Cell,
   LabelList,
 } from 'recharts'
-import { PROJECTS, YEARS, type Project } from './data/chaseFieldProjects'
-import { effectiveYear, escalatedCost, fmtM, type Overlay } from './phasing'
+import { PROJECTS, YEARS } from './data/chaseFieldProjects'
+import { effectiveYear, escalatedCost, effectiveTiming, isIncluded, fmtM, type Overlay, type TimingOverlay, type Exclusions } from './phasing'
 import { colorForGroup } from './groupColors'
 
 // Brand tokens (reference the same CSS variables defined in index.css).
@@ -27,10 +27,6 @@ const MID = 'var(--color-pcl-midgray)'
 const GROUPS = Array.from(new Set(PROJECTS.map((p) => p.group))).sort()
 const GROUP_NAME: Record<string, string> = {}
 for (const p of PROJECTS) GROUP_NAME[p.group] = p.groupName
-
-// A project disrupts the season only if it's explicitly Year-Round; everything
-// else (Offseason, or the lone untimed item) counts as Offseason.
-const isYearRound = (p: Project) => p.timing === 'Year-Round'
 
 const axisM = (v: number) => `$${(v / 1_000_000).toFixed(0)}M`
 
@@ -104,20 +100,33 @@ function ValueTooltip({ active, payload, label }: any) {
   )
 }
 
-export default function Analytics({ overlay, rate }: { overlay: Overlay; rate: number }) {
+export default function Analytics({
+  overlay,
+  rate,
+  timingOverlay,
+  excluded,
+}: {
+  overlay: Overlay
+  rate: number
+  timingOverlay: TimingOverlay
+  excluded: Exclusions
+}) {
+  // Every chart below counts INCLUDED items only — excluded scope is summed nowhere.
+
   // 1. Spend per year by group (stacked). One row per year, one numeric key per group.
   const byYearGroup = useMemo(() => {
     return YEARS.map((year) => {
       const row: Record<string, number | string> = { year: String(year) }
       for (const g of GROUPS) row[g] = 0
       for (const p of PROJECTS) {
+        if (!isIncluded(p, excluded)) continue
         if (effectiveYear(p, overlay) === year) {
           row[p.group] = (row[p.group] as number) + escalatedCost(p.baseCost, year, rate)
         }
       }
       return row
     })
-  }, [overlay, rate])
+  }, [overlay, rate, excluded])
 
   // 2. Cumulative S-curve across years.
   const cumulative = useMemo(() => {
@@ -125,13 +134,15 @@ export default function Analytics({ overlay, rate }: { overlay: Overlay; rate: n
     return YEARS.map((year) => {
       const yearTotal = PROJECTS.reduce(
         (s, p) =>
-          effectiveYear(p, overlay) === year ? s + escalatedCost(p.baseCost, year, rate) : s,
+          isIncluded(p, excluded) && effectiveYear(p, overlay) === year
+            ? s + escalatedCost(p.baseCost, year, rate)
+            : s,
         0,
       )
       running += yearTotal
       return { year: String(year), cumulative: running }
     })
-  }, [overlay, rate])
+  }, [overlay, rate, excluded])
 
   const grandTotal = cumulative.length ? cumulative[cumulative.length - 1].cumulative : 0
 
@@ -140,27 +151,34 @@ export default function Analytics({ overlay, rate }: { overlay: Overlay; rate: n
     const totals: Record<string, number> = {}
     for (const g of GROUPS) totals[g] = 0
     for (const p of PROJECTS) {
+      if (!isIncluded(p, excluded)) continue
       totals[p.group] += escalatedCost(p.baseCost, effectiveYear(p, overlay), rate)
     }
     return GROUPS.map((g) => ({ group: g, name: GROUP_NAME[g], value: totals[g] })).sort(
       (a, b) => b.value - a.value,
     )
-  }, [overlay, rate])
+  }, [overlay, rate, excluded])
 
-  // 4. Offseason vs Year-Round per year.
+  // 4. Offseason vs Year-Round vs Unknown per year. Timing comes from the live
+  // overlay; blanks resolve to 'unknown' and get their own segment (never folded
+  // into Offseason), so the chart doesn't overstate offseason-safe scope.
   const bySeason = useMemo(() => {
     return YEARS.map((year) => {
       let offseason = 0
       let yearRound = 0
+      let unknown = 0
       for (const p of PROJECTS) {
+        if (!isIncluded(p, excluded)) continue
         if (effectiveYear(p, overlay) !== year) continue
         const c = escalatedCost(p.baseCost, year, rate)
-        if (isYearRound(p)) yearRound += c
-        else offseason += c
+        const t = effectiveTiming(p, timingOverlay)
+        if (t === 'yearround') yearRound += c
+        else if (t === 'offseason') offseason += c
+        else unknown += c
       }
-      return { year: String(year), Offseason: offseason, 'Year-Round': yearRound }
+      return { year: String(year), Offseason: offseason, 'Year-Round': yearRound, Unknown: unknown }
     })
-  }, [overlay, rate])
+  }, [overlay, rate, timingOverlay, excluded])
 
   return (
     <main className="flex-1 overflow-y-auto bg-pcl-lightgray/20 p-4">
@@ -260,7 +278,7 @@ export default function Analytics({ overlay, rate }: { overlay: Overlay; rate: n
         {/* 4. Offseason vs Year-Round */}
         <ChartCard
           title="Offseason vs. Year-Round"
-          subtitle="Season-disruption risk per year (Year-Round in red)"
+          subtitle="Season-disruption risk per year (Year-Round red · Unknown gray)"
         >
           <ResponsiveContainer width="100%" height={320}>
             <BarChart data={bySeason} margin={{ top: 8, right: 16, bottom: 0, left: 8 }}>
@@ -271,6 +289,7 @@ export default function Analytics({ overlay, rate }: { overlay: Overlay; rate: n
               <Legend wrapperStyle={{ fontSize: 12, fontFamily: 'Barlow' }} />
               <Bar dataKey="Offseason" stackId="season" fill={GREEN} />
               <Bar dataKey="Year-Round" stackId="season" fill={ORANGE} />
+              <Bar dataKey="Unknown" stackId="season" fill={MID} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>

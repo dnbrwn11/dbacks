@@ -25,3 +25,41 @@
     color: var(--color-pcl-darkgray);
   }
 }
+
+/* ---- Print: hide the interactive app, show only the dedicated print layout ---- */
+@media print {
+  @page {
+    size: landscape;
+    margin: 0.5in;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  /* The print layout prints colored swatches and SVG chart fills faithfully. */
+  .print-root {
+    color: #000;
+    font-family: var(--font-sans);
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Keep table rows whole; don't split a row across a page boundary. */
+  .print-root tr {
+    break-inside: avoid;
+  }
+
+  /* Keep a section heading with the content that follows it. */
+  .print-root h1,
+  .print-root h2,
+  .print-root h3 {
+    break-after: avoid;
+  }
+
+  /* Recharts SVGs must print as sharp vectors — never clip or shrink them. */
+  .print-root svg {
+    overflow: visible;
+  }
+}
