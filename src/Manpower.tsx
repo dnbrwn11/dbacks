@@ -97,8 +97,8 @@ export default function Manpower({
   const [yrWeeks, setYrWeeks] = useState(48)
   const [hoursPerWeek, setHoursPerWeek] = useState(40)
   const [peakingFactor, setPeakingFactor] = useState(1.5)
-  const [staffRatio, setStaffRatio] = useState(30)
-  const [baseTeam, setBaseTeam] = useState(8)
+  const [staffRatio, setStaffRatio] = useState(22)
+  const [baseTeam, setBaseTeam] = useState(10)
   const [laborFractions, setLaborFractions] = useState<Record<string, number>>(seedLaborFractions)
 
   const rateValid = blendedRate > 0
@@ -149,7 +149,7 @@ export default function Manpower({
       for (const g of GROUPS) totalPeak += round(peakRaw[g][y])
       yearPeak[y] = totalPeak
       const ratio = staffRatio > 0 ? staffRatio : 1
-      yearStaff[y] = round(totalPeak / ratio + baseTeam)
+      yearStaff[y] = round(totalPeak / ratio) + baseTeam
     }
 
     const activeTrades = GROUPS.filter((g) => YEARS.some((y) => round(peakRaw[g][y]) > 0))
@@ -217,8 +217,20 @@ export default function Manpower({
           <Assumption label="Offseason window" value={offWeeks} onChange={setOffWeeks} suffix="wks" />
           <Assumption label="Year-round window" value={yrWeeks} onChange={setYrWeeks} suffix="wks" />
           <Assumption label="Hours / week" value={hoursPerWeek} onChange={setHoursPerWeek} suffix="hr" />
-          <Assumption label="Craft per field staff" value={staffRatio} onChange={setStaffRatio} suffix=":1" />
-          <Assumption label="Base team" value={baseTeam} onChange={setBaseTeam} suffix="ppl" />
+          <Assumption
+            label="Staff ratio (craft per field staff)"
+            value={staffRatio}
+            onChange={setStaffRatio}
+            suffix=":1"
+            hint="peak craft ÷ this = supervised staff"
+          />
+          <Assumption
+            label="Base team"
+            value={baseTeam}
+            onChange={setBaseTeam}
+            suffix="ppl"
+            hint="fixed PCL core added every year"
+          />
         </div>
 
         {/* Per-trade labor fraction table */}
