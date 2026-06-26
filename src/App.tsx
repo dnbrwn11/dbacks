@@ -707,12 +707,9 @@ export default function App() {
             Chase Field — Capital Program Planner
           </h1>
           {/* yellow chevron accent under the title */}
-          <div className="mt-0.5 h-1 w-24 bg-pcl-yellow" style={{ clipPath: 'polygon(0 0, 100% 0, calc(100% - 6px) 100%, 0 100%)' }} />
-          <p className="mt-1 font-sans text-xs text-white/80">
-            Re-phase, de-scope, and stress-test the program against escalation — live.
-          </p>
+          <div className="mt-1 h-1 w-24 bg-pcl-yellow" style={{ clipPath: 'polygon(0 0, 100% 0, calc(100% - 6px) 100%, 0 100%)' }} />
           {/* View tabs */}
-          <div className="mt-2 inline-flex overflow-hidden rounded-md border border-white/30">
+          <div className="mt-3 inline-flex overflow-hidden rounded-md border border-white/30">
             {(['phasing', 'analytics', 'resources'] as const).map((v) => (
               <button
                 key={v}

@@ -32,7 +32,7 @@ const CSI_LABEL: Record<string, string> = {
   M: 'Div 23 — HVAC',
   N: 'Div 26 — Electrical',
   L: 'Div 27 — Communications',
-  Q: 'Div 27 — Communications (AV/Broadcast)',
+  Q: 'Div 27 — AV/Broadcast',
   P: 'Div 28 — Electronic Safety & Security',
 }
 
