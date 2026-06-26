@@ -291,7 +291,10 @@ function ProjectCard({
         </span>
         {showSeason && <TimingBadge timing={timing} onToggle={onToggleTiming} compact />}
         {showScope && <ExcludeToggle excluded={excluded} onToggle={onToggleExclude} />}
-        <span className={'min-w-0 flex-1 truncate font-sans text-xs font-medium text-pcl-darkgray ' + struck}>
+        <span
+          className={'min-w-0 flex-1 truncate font-sans text-xs font-medium text-pcl-darkgray ' + struck}
+          title={`${project.name} — ${project.groupName}`}
+        >
           {project.name}
         </span>
         {excluded && (
@@ -463,7 +466,7 @@ function YearColumn({
 
   return (
     <div className="flex min-w-[260px] flex-1 flex-col rounded-lg bg-pcl-lightgray/40">
-      <div className="sticky top-0 z-10 rounded-t-lg border-b-2 border-pcl-yellow bg-pcl-lightgray/70 px-3 py-2">
+      <div className="sticky top-0 z-10 rounded-t-lg border-b-2 border-pcl-yellow bg-pcl-lightgray px-3 py-2">
         <div className="flex items-baseline justify-between">
           <span className="font-condensed text-2xl font-bold leading-none text-pcl-darkgray">
             {year}
@@ -868,8 +871,12 @@ export default function App() {
       {view === 'phasing' ? (
         <>
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-        {/* Columns */}
-        <main className="flex flex-1 gap-3 overflow-x-auto p-4">
+        {/* Columns — main is the scroll container (definite height); the inner row
+            has auto height + min-h-full so the single flex line grows to the tallest
+            column's content. This keeps every column's grey panel extended to its last
+            card while still matching all columns to the tallest. */}
+        <main className="flex-1 overflow-auto p-4">
+          <div className="flex min-h-full gap-3">
           {YEARS.map((year) => (
             <YearColumn
               key={year}
@@ -890,6 +897,7 @@ export default function App() {
               showSeason={showSeason}
             />
           ))}
+          </div>
         </main>
 
         <DragOverlay dropAnimation={null}>
