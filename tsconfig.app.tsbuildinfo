@@ -1,1 +1,1 @@
-{"root":["./src/Analytics.tsx","./src/App.tsx","./src/Manpower.tsx","./src/PrintLayout.tsx","./src/Resources.tsx","./src/groupColors.ts","./src/main.tsx","./src/phasing.ts","./src/vite-env.d.ts","./src/data/chaseFieldProjects.ts"],"version":"5.9.3"}
+{"root":["./src/Analytics.tsx","./src/App.tsx","./src/Manpower.tsx","./src/PrintLayout.tsx","./src/Resources.tsx","./src/funding.ts","./src/groupColors.ts","./src/main.tsx","./src/phasing.ts","./src/vite-env.d.ts","./src/data/chaseFieldProjects.ts"],"version":"5.9.3"}

@@ -15,13 +15,21 @@ import {
 } from 'recharts'
 import { PROJECTS, YEARS } from './data/chaseFieldProjects'
 import { effectiveYear, escalatedCost, effectiveTiming, isIncluded, fmtM, type Overlay, type TimingOverlay, type Exclusions } from './phasing'
+import { publicCost, publicPct, type FundingOverlay } from './funding'
 import { colorForGroup } from './groupColors'
 
 // Brand tokens (reference the same CSS variables defined in index.css).
 const GREEN = 'var(--color-pcl-green)'
 const ORANGE = 'var(--color-pcl-orange)'
+const INDIGO = 'var(--color-pcl-indigo)'
 const DARK = 'var(--color-pcl-darkgray)'
 const MID = 'var(--color-pcl-midgray)'
+
+const usd = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  maximumFractionDigits: 0,
+})
 
 // Stable group ordering + name lookup, derived from the existing data.
 const GROUPS = Array.from(new Set(PROJECTS.map((p) => p.group))).sort()
@@ -105,11 +113,13 @@ export default function Analytics({
   rate,
   timingOverlay,
   excluded,
+  fundingOverlay,
 }: {
   overlay: Overlay
   rate: number
   timingOverlay: TimingOverlay
   excluded: Exclusions
+  fundingOverlay: FundingOverlay
 }) {
   // Every chart below counts INCLUDED items only — excluded scope is summed nowhere.
 
@@ -180,6 +190,46 @@ export default function Analytics({
     })
   }, [overlay, rate, timingOverlay, excluded])
 
+  // 5. Public vs. private per year, using the Phase-1 escalated split. Private is
+  // (escalated − public) so each year's two stacks foot to that year's escalated
+  // spend exactly — matching the footer reconciliation. Excluded items count nowhere.
+  const byYearFunding = useMemo(() => {
+    return YEARS.map((year) => {
+      let pub = 0
+      let priv = 0
+      for (const p of PROJECTS) {
+        if (!isIncluded(p, excluded)) continue
+        if (effectiveYear(p, overlay) !== year) continue
+        const esc = escalatedCost(p.baseCost, year, rate)
+        const pp = publicCost(esc, publicPct(p, fundingOverlay))
+        pub += pp
+        priv += esc - pp
+      }
+      return { year: String(year), Public: pub, Private: priv }
+    })
+  }, [overlay, rate, excluded, fundingOverlay])
+
+  // 6. Program-level public/private totals + shares at current phasing.
+  const fundingSummary = useMemo(() => {
+    let pub = 0
+    let priv = 0
+    for (const p of PROJECTS) {
+      if (!isIncluded(p, excluded)) continue
+      const esc = escalatedCost(p.baseCost, effectiveYear(p, overlay), rate)
+      const pp = publicCost(esc, publicPct(p, fundingOverlay))
+      pub += pp
+      priv += esc - pp
+    }
+    const total = pub + priv
+    return {
+      publicTotal: pub,
+      privateTotal: priv,
+      total,
+      publicPct: total > 0 ? (pub / total) * 100 : 0,
+      privatePct: total > 0 ? (priv / total) * 100 : 0,
+    }
+  }, [overlay, rate, excluded, fundingOverlay])
+
   return (
     <main className="flex-1 overflow-y-auto bg-pcl-lightgray/20 p-4">
       {/* Chart 1 — primary, full width */}
@@ -204,6 +254,59 @@ export default function Analytics({
                 fill={colorForGroup(g).border}
               />
             ))}
+          </BarChart>
+        </ResponsiveContainer>
+      </ChartCard>
+
+      {/* Funding-scenario model — full width */}
+      <ChartCard
+        title="Public vs. Private Funding by Year"
+        subtitle="Funding-scenario model — planning assumptions, not a funding eligibility determination"
+        className="mb-4"
+      >
+        {/* Program-level summary — derived, live with phasing/exclusions/escalation. */}
+        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="rounded-md border border-pcl-lightgray bg-pcl-lightgray/10 p-3">
+            <div className="font-condensed text-xs font-semibold uppercase tracking-wide text-pcl-midgray">
+              Program total (escalated)
+            </div>
+            <div className="font-condensed text-2xl font-bold tabular-nums text-pcl-darkgray">
+              {usd.format(fundingSummary.total)}
+            </div>
+          </div>
+          <div className="rounded-md border-l-4 bg-pcl-lightgray/10 p-3" style={{ borderLeftColor: GREEN }}>
+            <div className="font-condensed text-xs font-semibold uppercase tracking-wide" style={{ color: GREEN }}>
+              Public
+            </div>
+            <div className="font-condensed text-2xl font-bold tabular-nums text-pcl-darkgray">
+              {usd.format(fundingSummary.publicTotal)}
+              <span className="ml-2 text-base font-medium text-pcl-midgray">
+                {fundingSummary.publicPct.toFixed(1)}%
+              </span>
+            </div>
+          </div>
+          <div className="rounded-md border-l-4 bg-pcl-lightgray/10 p-3" style={{ borderLeftColor: INDIGO }}>
+            <div className="font-condensed text-xs font-semibold uppercase tracking-wide" style={{ color: INDIGO }}>
+              Private
+            </div>
+            <div className="font-condensed text-2xl font-bold tabular-nums text-pcl-darkgray">
+              {usd.format(fundingSummary.privateTotal)}
+              <span className="ml-2 text-base font-medium text-pcl-midgray">
+                {fundingSummary.privatePct.toFixed(1)}%
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <ResponsiveContainer width="100%" height={360}>
+          <BarChart data={byYearFunding} margin={{ top: 8, right: 16, bottom: 0, left: 8 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-pcl-lightgray)" />
+            <XAxis dataKey="year" tick={{ fill: DARK, fontSize: 13 }} stroke={MID} />
+            <YAxis tickFormatter={axisM} tick={{ fill: DARK, fontSize: 12 }} stroke={MID} width={70} />
+            <Tooltip content={<GroupTooltip />} cursor={{ fill: 'var(--color-pcl-yellow)', opacity: 0.12 }} />
+            <Legend wrapperStyle={{ fontSize: 12, fontFamily: 'Barlow' }} />
+            <Bar dataKey="Public" stackId="funding" fill={GREEN} />
+            <Bar dataKey="Private" stackId="funding" fill={INDIGO} />
           </BarChart>
         </ResponsiveContainer>
       </ChartCard>

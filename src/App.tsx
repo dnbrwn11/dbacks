@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -26,6 +26,7 @@ import {
   type TimingOverlay,
   type Exclusions,
 } from './phasing'
+import { defaultPublicPct, publicCost, publicPct, type FundingOverlay } from './funding'
 import Analytics from './Analytics'
 import Resources from './Resources'
 import PrintLayout from './PrintLayout'
@@ -204,6 +205,138 @@ function ExcludeToggle({
   )
 }
 
+// Funding palette — public green / private indigo, matching the Analytics split
+// chart and intentionally distinct from the group color badges.
+const FUNDING_PUBLIC = '#00502f' // pcl-green
+const FUNDING_PRIVATE = '#4e5ba8' // pcl-indigo
+
+// Compact funding indicator + split editor. Reflects a project's public %:
+// "Public" (100), "Private" (0), or "Split XX%" (in between, XX = public share).
+// Interactive — opens the split popover — only when onSet is given; otherwise a
+// static pill (drag overlay). Only ever rendered when the Funding view toggle is on,
+// and the numeric input lives inside the popover so the card itself stays clean.
+function FundingBadge({
+  pct,
+  defaultPct,
+  onSet,
+  onReset,
+  compact = false,
+}: {
+  pct: number
+  defaultPct?: number
+  onSet?: (pct: number) => void
+  onReset?: () => void
+  compact?: boolean
+}) {
+  const interactive = !!onSet
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  // While open, close on outside pointerdown or Escape.
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: PointerEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('pointerdown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  const isPublic = pct >= 100
+  const isPrivate = pct <= 0
+  const label = isPublic ? 'Public' : isPrivate ? 'Private' : `Split ${Math.round(pct)}%`
+  const title = `Funding: ${label}${interactive ? ' — click to adjust' : ''}`
+
+  // Solid green/indigo at the extremes; a green→indigo split dot in between.
+  const dotStyle = isPublic
+    ? { backgroundColor: FUNDING_PUBLIC }
+    : isPrivate
+      ? { backgroundColor: FUNDING_PRIVATE }
+      : { background: `linear-gradient(90deg, ${FUNDING_PUBLIC} 0 50%, ${FUNDING_PRIVATE} 50% 100%)` }
+
+  // Keep clicks/drags on the control from starting a card drag.
+  const stop = (e: React.PointerEvent | React.MouseEvent) => e.stopPropagation()
+
+  const pill = (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      onPointerDown={interactive ? stop : undefined}
+      onClick={interactive ? (e) => { e.stopPropagation(); setOpen((v) => !v) } : undefined}
+      className={
+        'flex shrink-0 items-center gap-1 rounded-full border border-pcl-lightgray bg-white/70 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-pcl-darkgray ' +
+        (interactive ? 'cursor-pointer hover:ring-2 hover:ring-pcl-yellow' : '')
+      }
+    >
+      <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={dotStyle} />
+      {!compact && label}
+      {compact && (isPublic ? 'Pub' : isPrivate ? 'Pvt' : `${Math.round(pct)}%`)}
+    </button>
+  )
+
+  if (!interactive) return pill
+
+  return (
+    <div ref={ref} className="relative" onPointerDown={stop}>
+      {pill}
+      {open && (
+        <div
+          className="absolute left-0 top-full z-50 mt-1 w-44 rounded-md border border-pcl-lightgray bg-white p-2 shadow-lg"
+          onPointerDown={stop}
+        >
+          <div className="mb-1.5 font-condensed text-xs font-bold uppercase tracking-wide text-pcl-darkgray">
+            Funding split
+          </div>
+          <div className="mb-2 flex gap-1">
+            <button
+              type="button"
+              onClick={() => onSet!(100)}
+              className="flex-1 rounded border border-pcl-green px-1.5 py-1 font-condensed text-[11px] font-semibold text-pcl-green hover:bg-pcl-green hover:text-white"
+            >
+              100% Public
+            </button>
+            <button
+              type="button"
+              onClick={() => onSet!(0)}
+              className="flex-1 rounded border border-pcl-indigo px-1.5 py-1 font-condensed text-[11px] font-semibold text-pcl-indigo hover:bg-pcl-indigo hover:text-white"
+            >
+              100% Private
+            </button>
+          </div>
+          <label className="flex items-center justify-between gap-1.5 font-sans text-[11px] text-pcl-darkgray">
+            <span className="whitespace-nowrap">Custom public %</span>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              value={Math.round(pct)}
+              onChange={(e) => onSet!(Number(e.target.value))}
+              className="w-14 rounded border border-pcl-lightgray px-1 py-0.5 text-right font-condensed text-xs tabular-nums focus:border-pcl-yellow focus:outline-none"
+            />
+          </label>
+          {onReset && defaultPct !== undefined && (
+            <button
+              type="button"
+              onClick={() => onReset()}
+              className="mt-2 w-full rounded px-1.5 py-1 font-sans text-[11px] font-medium text-pcl-midgray underline decoration-dotted underline-offset-2 hover:text-pcl-darkgray"
+            >
+              Reset to baseline ({Math.round(defaultPct)}% public)
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Compact labeled switch for the header. Display-only — flips a boolean.
 function HeaderSwitch({
   label,
@@ -250,6 +383,11 @@ function ProjectCard({
   onToggleExclude,
   showScope = false,
   showSeason = false,
+  showFunding = false,
+  fundingPct,
+  fundingDefault,
+  onSetFunding,
+  onResetFunding,
   dragging = false,
   compact = false,
 }: {
@@ -261,10 +399,27 @@ function ProjectCard({
   onToggleExclude?: () => void
   showScope?: boolean
   showSeason?: boolean
+  showFunding?: boolean
+  fundingPct?: number
+  fundingDefault?: number
+  onSetFunding?: (pct: number) => void
+  onResetFunding?: () => void
   dragging?: boolean
   compact?: boolean
 }) {
   const color = colorForGroup(project.group)
+  // Funding badge is shown only when the Funding view toggle is on. Interactive on
+  // the board (onSetFunding wired); static on the drag overlay (handlers omitted).
+  const fundingBadge =
+    showFunding && fundingPct !== undefined ? (
+      <FundingBadge
+        pct={fundingPct}
+        defaultPct={fundingDefault}
+        onSet={onSetFunding}
+        onReset={onResetFunding}
+        compact={compact}
+      />
+    ) : null
   // Excluded cards read as "removed": muted name/cost with a strikethrough.
   const struck = excluded ? 'line-through decoration-pcl-midgray/80 text-pcl-midgray' : ''
 
@@ -291,6 +446,7 @@ function ProjectCard({
         </span>
         {showSeason && <TimingBadge timing={timing} onToggle={onToggleTiming} compact />}
         {showScope && <ExcludeToggle excluded={excluded} onToggle={onToggleExclude} />}
+        {fundingBadge}
         <span
           className={'min-w-0 flex-1 truncate font-sans text-xs font-medium text-pcl-darkgray ' + struck}
           title={`${project.name} — ${project.groupName}`}
@@ -347,6 +503,7 @@ function ProjectCard({
             {project.group} · {project.groupName}
           </span>
           {showSeason && <TimingBadge timing={timing} onToggle={onToggleTiming} />}
+          {fundingBadge}
         </div>
         <span className={'font-condensed text-base font-semibold tabular-nums text-pcl-darkgray ' + struck}>
           {usd.format(cost)}
@@ -365,6 +522,11 @@ function DraggableCard({
   onToggleExclude,
   showScope,
   showSeason,
+  showFunding,
+  fundingPct,
+  fundingDefault,
+  onSetFunding,
+  onResetFunding,
   compact = false,
   dimmed = false,
 }: {
@@ -376,6 +538,11 @@ function DraggableCard({
   onToggleExclude: () => void
   showScope: boolean
   showSeason: boolean
+  showFunding: boolean
+  fundingPct: number
+  fundingDefault: number
+  onSetFunding: (pct: number) => void
+  onResetFunding: () => void
   compact?: boolean
   dimmed?: boolean
 }) {
@@ -406,6 +573,11 @@ function DraggableCard({
         onToggleExclude={onToggleExclude}
         showScope={showScope}
         showSeason={showSeason}
+        showFunding={showFunding}
+        fundingPct={fundingPct}
+        fundingDefault={fundingDefault}
+        onSetFunding={onSetFunding}
+        onResetFunding={onResetFunding}
         compact={compact}
       />
     </div>
@@ -428,6 +600,10 @@ function YearColumn({
   onToggleExclude,
   showScope,
   showSeason,
+  showFunding,
+  fundingOverlay,
+  onSetFunding,
+  onResetFunding,
 }: {
   year: number
   projects: Project[]
@@ -444,6 +620,10 @@ function YearColumn({
   onToggleExclude: (id: string) => void
   showScope: boolean
   showSeason: boolean
+  showFunding: boolean
+  fundingOverlay: FundingOverlay
+  onSetFunding: (id: string, pct: number) => void
+  onResetFunding: (id: string) => void
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `year-${year}` })
 
@@ -523,6 +703,11 @@ function YearColumn({
             onToggleExclude={() => onToggleExclude(p.id)}
             showScope={showScope}
             showSeason={showSeason}
+            showFunding={showFunding}
+            fundingPct={publicPct(p, fundingOverlay)}
+            fundingDefault={defaultPublicPct(p)}
+            onSetFunding={(pct) => onSetFunding(p.id, pct)}
+            onResetFunding={() => onResetFunding(p.id)}
             compact={compact}
             dimmed={filterActive && !matches(p)}
           />
@@ -551,6 +736,7 @@ export default function App() {
   // These only control VISIBILITY of the per-card controls, never the overlays.
   const [showScope, setShowScope] = useState(false)
   const [showSeason, setShowSeason] = useState(false)
+  const [showFunding, setShowFunding] = useState(false)
   const [activeGroups, setActiveGroups] = useState<string[]>([]) // empty => "All"
   const filterActive = activeGroups.length > 0
   const matches = (p: Project) => !filterActive || activeGroups.includes(p.group)
@@ -583,6 +769,36 @@ export default function App() {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
       else next.add(id)
+      return next
+    })
+  }
+
+  // Funding-split override overlay — a sparse Record<projectId, publicPct>. Absent =>
+  // the project resolves to its group default (see publicPct/defaultPublicPct). Never
+  // mutates source data; totals and Analytics read the effective value live.
+  const [fundingOverlay, setFundingOverlay] = useState<FundingOverlay>({})
+
+  function setFunding(id: string, pct: number) {
+    const clamped = Math.max(0, Math.min(100, Math.round(pct || 0)))
+    setFundingOverlay((prev) => {
+      const p = PROJECTS.find((x) => x.id === id)
+      // If the override equals the group default, drop it so the overlay stays sparse
+      // (and the card reads as "on baseline" for funding).
+      if (p && clamped === defaultPublicPct(p)) {
+        const next = { ...prev }
+        delete next[id]
+        return next
+      }
+      return { ...prev, [id]: clamped }
+    })
+  }
+
+  // Clear a single card's override back to its group default.
+  function resetFunding(id: string) {
+    setFundingOverlay((prev) => {
+      if (!(id in prev)) return prev
+      const next = { ...prev }
+      delete next[id]
       return next
     })
   }
@@ -650,12 +866,46 @@ export default function App() {
     return m
   }, [rate, excluded])
 
+  // Public/private split of the escalated program. Derived from the funding-split
+  // assumptions and reflects current placement (overlay), exclusions, and escalation
+  // — same inputs as grandTotal. Each project's private half is (escalated − public)
+  // so the two halves sum to its escalated cost exactly; by construction the program
+  // and per-year publics + privates reconcile to the escalated totals to the dollar.
+  // Excluded items are skipped entirely, contributing zero to both.
+  const funding = useMemo(() => {
+    let publicTotal = 0
+    let privateTotal = 0
+    const perYearPublic: Record<number, number> = {}
+    const perYearPrivate: Record<number, number> = {}
+    for (const y of YEARS) {
+      perYearPublic[y] = 0
+      perYearPrivate[y] = 0
+    }
+    for (const p of PROJECTS) {
+      if (!isIncluded(p, excluded)) continue
+      const y = effectiveYear(p, overlay)
+      const esc = escalatedCost(p.baseCost, y, rate)
+      const pub = publicCost(esc, publicPct(p, fundingOverlay))
+      const priv = esc - pub
+      publicTotal += pub
+      privateTotal += priv
+      if (perYearPublic[y] === undefined) {
+        perYearPublic[y] = 0
+        perYearPrivate[y] = 0
+      }
+      perYearPublic[y] += pub
+      perYearPrivate[y] += priv
+    }
+    return { publicTotal, privateTotal, perYearPublic, perYearPrivate }
+  }, [overlay, rate, excluded, fundingOverlay])
+
   const timingDirty = PROJECTS.some((p) => effectiveTiming(p, timingOverlay) !== sourceTiming(p))
   const isDirty =
     Object.keys(overlay).length > 0 ||
     rate !== DEFAULT_ESCALATION ||
     timingDirty ||
-    excluded.size > 0
+    excluded.size > 0 ||
+    Object.keys(fundingOverlay).length > 0
 
   function handleDragStart(event: DragStartEvent) {
     setActiveId(String(event.active.id))
@@ -687,6 +937,7 @@ export default function App() {
     setRate(DEFAULT_ESCALATION)
     setTimingOverlay(seedTiming())
     setExcluded(new Set())
+    setFundingOverlay({})
   }
 
   const ratePct = (rate * 100).toFixed(1)
@@ -809,6 +1060,7 @@ export default function App() {
           {/* Card-control display toggles (display only; overlays persist). */}
           <HeaderSwitch label="Scope toggles" on={showScope} onToggle={() => setShowScope((v) => !v)} />
           <HeaderSwitch label="Season flags" on={showSeason} onToggle={() => setShowSeason((v) => !v)} />
+          <HeaderSwitch label="Funding view" on={showFunding} onToggle={() => setShowFunding((v) => !v)} />
 
           {/* Group filter (multi-select; does not remove cards or change totals).
               One button per project group, colored to match the card group badges. */}
@@ -895,6 +1147,10 @@ export default function App() {
               onToggleExclude={toggleExclude}
               showScope={showScope}
               showSeason={showSeason}
+              showFunding={showFunding}
+              fundingOverlay={fundingOverlay}
+              onSetFunding={setFunding}
+              onResetFunding={resetFunding}
             />
           ))}
           </div>
@@ -914,6 +1170,8 @@ export default function App() {
                 excluded={!isIncluded(activeProject, excluded)}
                 showScope={showScope}
                 showSeason={showSeason}
+                showFunding={showFunding}
+                fundingPct={publicPct(activeProject, fundingOverlay)}
                 dragging
                 compact={density === 'compact'}
               />
@@ -932,6 +1190,27 @@ export default function App() {
             {usd.format(grandTotal)}
           </span>
         </div>
+
+        {/* Public/private split verification readout — must reconcile to the grand
+            total above. Sum is shown so the math is checkable at a glance. */}
+        <div className="flex items-baseline gap-2">
+          <span className="font-condensed text-xs font-semibold uppercase tracking-wide text-white/60">
+            Public
+          </span>
+          <span className="font-condensed text-base font-medium tabular-nums text-white/90">
+            {usd.format(funding.publicTotal)}
+          </span>
+          <span className="font-condensed text-xs font-semibold uppercase tracking-wide text-white/60">
+            Private
+          </span>
+          <span className="font-condensed text-base font-medium tabular-nums text-white/90">
+            {usd.format(funding.privateTotal)}
+          </span>
+          <span className="font-condensed text-xs font-normal tabular-nums text-white/50">
+            (= {usd.format(funding.publicTotal + funding.privateTotal)})
+          </span>
+        </div>
+
         <div className="flex items-baseline gap-2">
           <span className="font-condensed text-xs font-semibold uppercase tracking-wide text-white/60">
             Baseline (un-escalated)
@@ -975,7 +1254,7 @@ export default function App() {
       </footer>
         </>
       ) : view === 'analytics' ? (
-        <Analytics overlay={overlay} rate={rate} timingOverlay={timingOverlay} excluded={excluded} />
+        <Analytics overlay={overlay} rate={rate} timingOverlay={timingOverlay} excluded={excluded} fundingOverlay={fundingOverlay} />
       ) : (
         <Resources overlay={overlay} rate={rate} timingOverlay={timingOverlay} excluded={excluded} />
       )}
