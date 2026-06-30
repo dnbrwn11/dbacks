@@ -29,6 +29,7 @@ import {
 import { defaultPublicPct, publicCost, publicPct, type FundingOverlay } from './funding'
 import Analytics from './Analytics'
 import Resources from './Resources'
+import ChaseFieldVenueMap, { type VenueProject } from './ChaseFieldVenueMap'
 import PrintLayout from './PrintLayout'
 import pclLogo from './assets/pcl-logo.png'
 
@@ -727,8 +728,8 @@ export default function App() {
   const [rate, setRate] = useState<number>(DEFAULT_ESCALATION)
   const [activeId, setActiveId] = useState<string | null>(null)
 
-  // Which top-level view is showing. Analytics & Resources derive read-only from state.
-  const [view, setView] = useState<'phasing' | 'analytics' | 'resources'>('phasing')
+  // Which top-level view is showing. Analytics, Resources & Venue Map derive read-only from state.
+  const [view, setView] = useState<'phasing' | 'analytics' | 'resources' | 'venuemap'>('phasing')
 
   // View-only state — derived UI only, no effect on placement/totals/drag.
   const [density, setDensity] = useState<Density>('detailed')
@@ -899,6 +900,21 @@ export default function App() {
     return { publicTotal, privateTotal, perYearPublic, perYearPrivate }
   }, [overlay, rate, excluded, fundingOverlay])
 
+  // Live feed for the Venue Map tab: one entry per INCLUDED project at its CURRENT
+  // assigned year (overlay wins, else defaultYear). The component escalates and
+  // aggregates internally (using escalationRate + minYear), so re-phasing or
+  // de-scoping on the Phasing tab flows straight through to the bowl.
+  const venueProjects = useMemo<VenueProject[]>(
+    () =>
+      PROJECTS.filter((p) => isIncluded(p, excluded)).map((p) => ({
+        group: p.group,
+        groupName: p.groupName,
+        year: effectiveYear(p, overlay),
+        baseCost: p.baseCost,
+      })),
+    [overlay, excluded],
+  )
+
   const timingDirty = PROJECTS.some((p) => effectiveTiming(p, timingOverlay) !== sourceTiming(p))
   const isDirty =
     Object.keys(overlay).length > 0 ||
@@ -964,7 +980,7 @@ export default function App() {
           <div className="mt-1 h-1 w-24 bg-pcl-yellow" style={{ clipPath: 'polygon(0 0, 100% 0, calc(100% - 6px) 100%, 0 100%)' }} />
           {/* View tabs */}
           <div className="mt-3 inline-flex overflow-hidden rounded-md border border-white/30">
-            {(['phasing', 'analytics', 'resources'] as const).map((v) => (
+            {(['phasing', 'analytics', 'resources', 'venuemap'] as const).map((v) => (
               <button
                 key={v}
                 onClick={() => setView(v)}
@@ -975,7 +991,13 @@ export default function App() {
                     : 'bg-white/10 text-white hover:bg-white/20')
                 }
               >
-                {v === 'phasing' ? 'Phasing' : v === 'analytics' ? 'Analytics' : 'Resources'}
+                {v === 'phasing'
+                  ? 'Phasing'
+                  : v === 'analytics'
+                    ? 'Analytics'
+                    : v === 'resources'
+                      ? 'Resources'
+                      : 'Venue Map'}
               </button>
             ))}
           </div>
@@ -1255,8 +1277,12 @@ export default function App() {
         </>
       ) : view === 'analytics' ? (
         <Analytics overlay={overlay} rate={rate} timingOverlay={timingOverlay} excluded={excluded} fundingOverlay={fundingOverlay} />
-      ) : (
+      ) : view === 'resources' ? (
         <Resources overlay={overlay} rate={rate} timingOverlay={timingOverlay} excluded={excluded} />
+      ) : (
+        <main className="flex-1 overflow-auto p-4">
+          <ChaseFieldVenueMap projects={venueProjects} escalationRate={rate} minYear={MIN_YEAR} />
+        </main>
       )}
     </div>
 
